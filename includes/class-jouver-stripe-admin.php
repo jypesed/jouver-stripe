@@ -86,9 +86,26 @@ class Jouver_Stripe_Admin {
 		echo '<form method="post" enctype="multipart/form-data" style="max-width:760px">';
 		wp_nonce_field( 'jouver_stripe_admin', 'jouver_stripe_nonce' );
 		echo '<p>For dealers who paid before this plugin was installed. In Stripe open <strong>Subscriptions → Export</strong> (all columns, CSV) and upload the file here. Each row is matched to a dealer by exact e-mail. For a dealer whose Stripe e-mail differs, add a <code>user_id</code> column to the CSV with the WordPress user id. Nothing the webhook has already written is changed. Fill the plan map first so the imported dealers get a plan name.</p>';
-		echo '<p><input type="file" name="jouver_stripe_csv" accept=".csv,text/csv" required> ';
-		echo '<label><input type="checkbox" name="jouver_stripe_write" value="1"> Write to the database (unticked = preview only)</label></p>';
-		echo '<p><button class="button button-primary" name="jouver_stripe_action" value="import">Upload</button></p></form>';
+		echo '<p><input type="file" name="jouver_stripe_csv" accept=".csv,text/csv" required></p>';
+		echo '<p><button class="button button-primary" name="jouver_stripe_action" value="import">Upload and preview</button> Nothing is written until you confirm on the preview.</p></form>';
+	}
+
+	/** The preview table with a user id box per row and the Import button. */
+	private static function preview( array $lines, $token, $written ) {
+		$html  = '<div class="notice notice-' . ( $written ? 'success' : 'info' ) . '" style="padding-bottom:12px"><p><strong>' . ( $written ? 'Imported.' : 'Preview, nothing written yet.' ) . '</strong> ' . count( $lines ) . ' row(s). Rows in yellow need attention: type the WordPress user id for an unmatched dealer, fill the Plan map for "not mapped".</p>';
+		$html .= '<form method="post">' . wp_nonce_field( 'jouver_stripe_admin', 'jouver_stripe_nonce', true, false ) . '<input type="hidden" name="jouver_stripe_token" value="' . esc_attr( $token ) . '">';
+		$html .= '<table class="widefat striped" style="margin:8px 0"><thead><tr><th>E-mail</th><th>User id</th><th>Status</th><th>Plan</th><th>Price id</th><th>Product id</th><th>Period end</th><th>Result</th></tr></thead><tbody>';
+		foreach ( $lines as $i => $l ) {
+			$skipped = 0 === strpos( $l['result'], 'skipped' );
+			$bad     = ! $skipped && ( 0 === strpos( $l['result'], 'unmatched' ) || '' === $l['plan_key'] );
+			$uid     = $skipped ? '' : '<input type="number" name="jouver_stripe_uid[' . (int) $i . ']" value="' . ( $l['user_id'] ? (int) $l['user_id'] : '' ) . '" style="width:7em" placeholder="user id">';
+			$html   .= '<tr' . ( $bad ? ' style="background:#fffbeb"' : '' ) . '><td>' . esc_html( $l['email'] ) . '</td><td>' . $uid . '</td><td>' . esc_html( $l['status'] ) . '</td><td>' . ( '' === $l['plan_key'] ? '<em>not mapped</em>' : esc_html( $l['plan_key'] ) ) . '</td><td><code>' . esc_html( $l['price_id'] ) . '</code></td><td><code>' . esc_html( $l['product_id'] ) . '</code></td><td>' . esc_html( $l['period_end'] ) . '</td><td>' . esc_html( $l['result'] ) . '</td></tr>';
+		}
+		$html .= '</tbody></table>';
+		if ( ! $written ) {
+			$html .= '<p><button class="button" name="jouver_stripe_action" value="preview">Refresh preview</button> <button class="button button-primary" name="jouver_stripe_action" value="write">Import these dealers</button> Unmatched and skipped rows are left out.</p>';
+		}
+		return $html . '</form></div>';
 	}
 
 	/** @return string HTML notice, or '' */
@@ -112,6 +129,7 @@ class Jouver_Stripe_Admin {
 			return '<div class="notice notice-success"><p>Plan map saved: ' . count( $map ) . ' id(s). ' . (int) $changed . ' dealer row(s) updated.</p></div>';
 		}
 
+		// Upload: parse, keep the rows for an hour, show the preview.
 		if ( 'import' === $action ) {
 			if ( empty( $_FILES['jouver_stripe_csv']['tmp_name'] ) || ! is_uploaded_file( $_FILES['jouver_stripe_csv']['tmp_name'] ) ) {
 				return '<div class="notice notice-error"><p>No file received.</p></div>';
@@ -119,20 +137,36 @@ class Jouver_Stripe_Admin {
 			if ( (int) $_FILES['jouver_stripe_csv']['size'] > 5 * 1024 * 1024 ) {
 				return '<div class="notice notice-error"><p>File larger than 5 MB.</p></div>';
 			}
-			$csv   = file_get_contents( $_FILES['jouver_stripe_csv']['tmp_name'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-			$rows  = Jouver_Stripe_Import::parse_csv( $csv );
-			$write = ! empty( $_POST['jouver_stripe_write'] );
+			$csv  = file_get_contents( $_FILES['jouver_stripe_csv']['tmp_name'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			$rows = Jouver_Stripe_Import::parse_csv( $csv );
 			if ( ! $rows ) {
 				return '<div class="notice notice-error"><p>No rows found. Is this Stripe\'s Subscriptions CSV export?</p></div>';
 			}
-			$lines = Jouver_Stripe_Import::run( $rows, ! $write );
-			$html  = '<div class="notice notice-' . ( $write ? 'success' : 'info' ) . '"><p><strong>' . ( $write ? 'Imported.' : 'Preview only, nothing written.' ) . '</strong> ' . count( $lines ) . ' row(s).</p>';
-			$html .= '<table class="widefat striped" style="margin:8px 0"><thead><tr><th>E-mail</th><th>User</th><th>Status</th><th>Plan</th><th>Result</th></tr></thead><tbody>';
-			foreach ( $lines as $l ) {
-				$bad   = 0 === strpos( $l['result'], 'unmatched' ) || ( '' === $l['plan_key'] && 0 !== strpos( $l['result'], 'skipped' ) );
-				$html .= '<tr' . ( $bad ? ' style="background:#fffbeb"' : '' ) . '><td>' . esc_html( $l['email'] ) . '</td><td>' . ( $l['user_id'] ? (int) $l['user_id'] : '' ) . '</td><td>' . esc_html( $l['status'] ) . '</td><td>' . ( '' === $l['plan_key'] ? '<em>not mapped</em>' : esc_html( $l['plan_key'] ) ) . '</td><td>' . esc_html( $l['result'] ) . '</td></tr>';
+			$token = wp_generate_password( 20, false );
+			set_transient( 'jouver_stripe_import_' . $token, $rows, HOUR_IN_SECONDS );
+			return self::preview( Jouver_Stripe_Import::run( $rows, true ), $token, false );
+		}
+
+		// Preview again with typed user ids, or write.
+		if ( 'preview' === $action || 'write' === $action ) {
+			$token = preg_replace( '/[^A-Za-z0-9]/', '', (string) wp_unslash( $_POST['jouver_stripe_token'] ?? '' ) );
+			$rows  = '' !== $token ? get_transient( 'jouver_stripe_import_' . $token ) : false;
+			if ( ! is_array( $rows ) ) {
+				return '<div class="notice notice-error"><p>The preview has expired (one hour). Upload the CSV again.</p></div>';
 			}
-			return $html . '</tbody></table></div>';
+			$overrides = array();
+			foreach ( (array) ( $_POST['jouver_stripe_uid'] ?? array() ) as $i => $v ) {
+				$v = trim( (string) wp_unslash( $v ) );
+				if ( ctype_digit( $v ) && (int) $v > 0 ) {
+					$overrides[ (int) $i ] = (int) $v;
+				}
+			}
+			$write = 'write' === $action;
+			$lines = Jouver_Stripe_Import::run( $rows, ! $write, $overrides );
+			if ( $write ) {
+				delete_transient( 'jouver_stripe_import_' . $token );
+			}
+			return self::preview( $lines, $token, $write );
 		}
 		return '';
 	}

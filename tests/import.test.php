@@ -44,6 +44,12 @@ ok( 0 === strpos( $lines[1]['result'], 'skipped (canceled)' ), 'preview: a cance
 ok( 0 === strpos( $lines[3]['result'], 'unmatched' ), 'preview: a website customer with no dealer account is unmatched' );
 ok( 90 === $lines[4]['user_id'] && 'would import' === $lines[4]['result'], 'preview: a hand-added user_id column wins over a different e-mail' );
 
+// A user id typed on the preview screen
+$lines = Jouver_Stripe_Import::run( $rows, true, array( 3 => 90 ) );
+ok( 90 === $lines[3]['user_id'] && 'would import' === $lines[3]['result'], 'preview: a typed user id matches an unmatched row' );
+ok( 0 === strpos( Jouver_Stripe_Import::run( $rows, true, array( 3 => 12345 ) )[3]['result'], 'unmatched: no WordPress user' ), 'preview: a typed id that is no user is refused' );
+ok( 'prod_ELITE' === $lines[0]['product_id'] && 'price_ELITE_Y' === $lines[0]['price_id'], 'preview: raw price and product ids shown' );
+
 // With the stored plan map (what Settings → Jouver Stripe saves)
 $OPT['jouver_stripe_plan_map'] = array( 'prod_ELITE' => 'elite', 'price_F1_M' => 'formula1' );
 $lines = Jouver_Stripe_Import::run( $rows, false );

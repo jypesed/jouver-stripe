@@ -43,12 +43,13 @@ Dealers who paid before this plugin existed have no row and show as free, and an
 send a renewal event for up to a year. Import them once, without an API key:
 1. Fill the Plan map (above) first.
 2. In Stripe: **Subscriptions → Export**, all columns, CSV.
-3. Settings → Jouver Stripe → **Import existing dealers**: upload the file with "Write" unticked to preview,
-   check the table, then upload again with "Write" ticked.
+3. Settings → Jouver Stripe → **Import existing dealers**: upload the file. A preview shows every row with
+   its match; type the WordPress user id for any dealer whose Stripe e-mail differs, then click
+   **Import these dealers**. Nothing is written before that click.
 
-Each row is matched to a dealer by exact e-mail. For a dealer whose Stripe e-mail differs, add a `user_id`
-column to the CSV with their WordPress user id. Canceled rows are skipped, website customers show as
-unmatched, and a row the webhook has already written is never overwritten. From then on `invoice.paid`
+Each row is matched to a dealer by exact e-mail, or by the user id you type (a `user_id` column in the CSV
+also works). Canceled rows are skipped, website customers stay unmatched and are left out, and a row the
+webhook has already written is never overwritten. From then on `invoice.paid`
 (which carries the e-mail) also links any dealer the import missed, at their next payment.
 
 ## Safety

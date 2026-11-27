@@ -97,25 +97,34 @@ class Jouver_Stripe_Import {
 	 *
 	 * @return array[] one line per CSV row: {email, user_id, status, plan_key, result}
 	 */
-	public static function run( array $rows, $dry_run = true ) {
+	public static function run( array $rows, $dry_run = true, array $overrides = array() ) {
 		$out = array();
-		foreach ( $rows as $row ) {
+		foreach ( array_values( $rows ) as $i => $row ) {
 			$n    = self::normalise( $row );
-			$line = array( 'email' => $n['email'], 'user_id' => 0, 'status' => $n['status'], 'plan_key' => $n['fields']['plan_key'], 'result' => '' );
+			$line = array( 'email' => $n['email'], 'user_id' => 0, 'status' => $n['status'], 'plan_key' => $n['fields']['plan_key'], 'price_id' => $n['fields']['price_id'], 'product_id' => $n['fields']['product_id'], 'period_end' => (string) $n['fields']['current_period_end'], 'result' => '' );
 			if ( ! in_array( $n['status'], self::KEEP, true ) ) {
 				$line['result'] = 'skipped (' . ( '' === $n['status'] ? 'no status' : $n['status'] ) . ')';
 				$out[]          = $line;
 				continue;
 			}
+			// A user id typed on the preview screen wins, then a user_id column, then the e-mail.
+			if ( ! empty( $overrides[ $i ] ) && ctype_digit( (string) $overrides[ $i ] ) ) {
+				$n['user_id'] = (int) $overrides[ $i ];
+			}
 			$user_id = 0;
-			if ( $n['user_id'] > 0 && get_userdata( $n['user_id'] ) ) {
+			if ( $n['user_id'] > 0 ) {
+				if ( ! get_userdata( $n['user_id'] ) ) {
+					$line['result'] = 'unmatched: no WordPress user with id ' . $n['user_id'];
+					$out[]          = $line;
+					continue;
+				}
 				$user_id = $n['user_id'];
 			} elseif ( '' !== $n['email'] ) {
 				$u       = get_user_by( 'email', $n['email'] );
 				$user_id = $u ? (int) $u->ID : 0;
 			}
 			if ( ! $user_id ) {
-				$line['result'] = 'unmatched: no dealer with this e-mail (add a user_id column)';
+				$line['result'] = 'unmatched: no dealer with this e-mail. Type the user id and import again.';
 				$out[]          = $line;
 				continue;
 			}
