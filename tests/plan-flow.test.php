@@ -54,6 +54,18 @@ ok( 'stale' === $r->data['outcome'] && 'past_due' === $GLOBALS['wpdb']->sub[42][
 send( array( 'id' => 'evt_4', 'type' => 'customer.subscription.deleted', 'created' => 400, 'data' => array( 'object' => $sub( 'x', 1, 'active' )['data']['object'] ) ) );
 ok( 'canceled' === Jouver_Stripe_Plan::for_user( 42 )['state'], 'cancellation ends the plan' );
 
+// A dealer who paid before the plugin existed (Stripe has never sent us a checkout for them)
+$USERS[77] = 'bert@example.com';
+$r = send( $sub( 'evt_6', 600, 'active', 'cus_old' ) );
+ok( 'unmatched' === $r->data['outcome'] && ! isset( $GLOBALS['wpdb']->sub[77] ), 'old dealer: a subscription event alone carries no e-mail, so it is held' );
+$r = send( array( 'id' => 'evt_7', 'type' => 'invoice.paid', 'created' => 610, 'data' => array( 'object' => array( 'customer' => 'cus_old', 'customer_email' => 'Bert@Example.com', 'subscription' => 'sub_old', 'currency' => 'gbp',
+	'lines' => array( 'data' => array( array( 'period' => array( 'end' => 1800000000 ), 'price' => array( 'id' => 'price_E', 'product' => 'prod_E', 'nickname' => 'Elite' ) ) ) ) ) ) ) );
+$row = $GLOBALS['wpdb']->sub[77] ?? array();
+ok( 'matched_by_email' === $r->data['outcome'] && 'cus_old' === ( $row['stripe_customer_id'] ?? '' ) && 'active' === ( $row['status'] ?? '' ) && 'Elite' === ( $row['plan_label'] ?? '' ), 'old dealer: invoice.paid at renewal links them by e-mail and sets the plan' );
+ok( 'active' === Jouver_Stripe_Plan::for_user( 77 )['state'] && 1800000000 === Jouver_Stripe_Plan::for_user( 77 )['period_end'], 'old dealer now shows an active plan with the renewal date' );
+$r = send( $sub( 'evt_8', 700, 'active', 'cus_old' ) );
+ok( 'matched_by_customer' === $r->data['outcome'], 'from then on their subscription events match by customer' );
+
 // A website customer who is not a dealer
 $r = send( $sub( 'evt_5', 500, 'active', 'cus_web' ) );
 ok( 'unmatched' === $r->data['outcome'] && 200 === $r->status, 'a customer we do not know is answered 200 (Stripe does not retry for days)' );

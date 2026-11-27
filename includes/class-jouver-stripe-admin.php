@@ -37,7 +37,7 @@ class Jouver_Stripe_Admin {
 		echo '<table class="widefat striped" style="max-width:760px"><tbody>';
 		echo '<tr><th>Webhook URL (add this in Stripe)</th><td><code>' . esc_html( $url ) . '</code></td></tr>';
 		echo '<tr><th>Signing secret</th><td>' . ( $secret ? '<strong style="color:#15803d">configured</strong>' : '<strong style="color:#b91c1c">missing</strong>: add <code>define( \'JOUVER_STRIPE_WEBHOOK_SECRET\', \'whsec_…\' );</code> to wp-config.php' ) . '</td></tr>';
-		echo '<tr><th>Events to send</th><td><code>checkout.session.completed</code>, <code>customer.subscription.created</code>, <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>, <code>invoice.payment_failed</code></td></tr>';
+		echo '<tr><th>Events to send</th><td><code>checkout.session.completed</code>, <code>customer.subscription.created</code>, <code>customer.subscription.updated</code>, <code>customer.subscription.deleted</code>, <code>invoice.paid</code>, <code>invoice.payment_failed</code></td></tr>';
 		echo '<tr><th>Plan names</th><td>Set the metadata <code>jouver_plan</code> (for example <code>elite</code>) on each Stripe price, or map ids with the <code>jouver_stripe_plan_map</code> filter. Plans are never guessed.</td></tr>';
 		echo '</tbody></table>';
 

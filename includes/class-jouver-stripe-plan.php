@@ -14,7 +14,7 @@
  * Settings → Jouver Stripe, with the events
  *   checkout.session.completed
  *   customer.subscription.created / .updated / .deleted
- *   invoice.payment_failed
+ *   invoice.paid, invoice.payment_failed
  *
  * No Stripe secret API key is needed: everything used is in the event itself.
  * Without the signing secret the endpoint answers 503 and stores nothing.
@@ -22,7 +22,9 @@
  * Which dealer? The pricing table sends the WordPress user id as
  * client_reference_id; checkout.session.completed links that user to the
  * Stripe customer, and later subscription events find the user by customer.
- * Only if both fail is the e-mail used (one exact match).
+ * Only if both fail is the e-mail used (one exact match). Dealers who paid
+ * before this plugin existed are linked by e-mail from invoice.paid at their
+ * next renewal; subscription events alone carry no e-mail.
  *
  * Which plan? Never guessed. In order: the price's metadata key `jouver_plan`
  * (set it on each Stripe price), then the `jouver_stripe_plan_map` filter
@@ -191,9 +193,36 @@ class Jouver_Stripe_Plan {
 			return $out;
 		}
 
-		if ( 'invoice.payment_failed' === $type ) {
-			$out['subscription'] = self::id_of( $obj['subscription'] ?? '' );
-			$out['fields']       = array( 'status' => 'past_due' );
+		// Invoices carry the customer's e-mail, which subscription events do not.
+		// invoice.paid fires at every renewal, so a dealer who subscribed before
+		// this plugin existed is linked, by e-mail, at the next monthly payment.
+		if ( in_array( $type, array( 'invoice.paid', 'invoice.payment_succeeded', 'invoice.payment_failed' ), true ) ) {
+			$out['subscription'] = self::id_of( $obj['subscription'] ?? ( $obj['parent']['subscription_details']['subscription'] ?? '' ) );
+			$email               = $obj['customer_email'] ?? '';
+			$out['email']        = is_string( $email ) ? strtolower( trim( $email ) ) : '';
+			if ( 'invoice.payment_failed' === $type ) {
+				$out['fields'] = array( 'status' => 'past_due', 'stripe_customer_id' => $out['customer'], 'stripe_subscription_id' => $out['subscription'] );
+				return $out;
+			}
+			if ( '' === $out['subscription'] ) {
+				return null; // A one-off invoice is not a plan.
+			}
+			$line  = isset( $obj['lines']['data'][0] ) && is_array( $obj['lines']['data'][0] ) ? $obj['lines']['data'][0] : array();
+			$price = isset( $line['price'] ) && is_array( $line['price'] ) ? $line['price'] : ( $line['pricing']['price_details'] ?? array() );
+			$price = is_array( $price ) ? $price : array();
+			$price_id   = self::id_of( $price['id'] ?? ( $price['price'] ?? '' ) );
+			$product_id = self::id_of( $price['product'] ?? '' );
+			$out['fields'] = array(
+				'status'                 => 'active',
+				'stripe_customer_id'     => $out['customer'],
+				'stripe_subscription_id' => $out['subscription'],
+				'price_id'               => $price_id,
+				'product_id'             => $product_id,
+				'plan_key'               => self::plan_from( $price_id, $product_id, isset( $price['metadata'] ) && is_array( $price['metadata'] ) ? $price['metadata'] : array() ),
+				'plan_label'             => (string) ( $price['nickname'] ?? ( $price['lookup_key'] ?? '' ) ),
+				'currency'               => strtoupper( substr( (string) ( $obj['currency'] ?? '' ), 0, 3 ) ),
+				'current_period_end'     => isset( $line['period']['end'] ) && (int) $line['period']['end'] > 0 ? gmdate( 'Y-m-d H:i:s', (int) $line['period']['end'] ) : null,
+			);
 			return $out;
 		}
 
@@ -322,7 +351,7 @@ class Jouver_Stripe_Plan {
 		if ( 'stale' === $result ) {
 			return 'stale';
 		}
-		if ( 'checkout.session.completed' === $n['type'] && '' !== $n['customer'] ) {
+		if ( in_array( $n['type'], array( 'checkout.session.completed', 'invoice.paid', 'invoice.payment_succeeded' ), true ) && '' !== $n['customer'] ) {
 			$key     = 'jouver_stripe_pending_' . md5( $n['customer'] );
 			$pending = get_transient( $key );
 			if ( is_array( $pending ) ) {

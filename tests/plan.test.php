@@ -53,6 +53,13 @@ $del = $sub( array() ); $del['type'] = 'customer.subscription.deleted';
 ok( 'canceled' === $S::normalise( $del )['fields']['status'], 'deleted means canceled' );
 $pf = $S::normalise( array( 'type' => 'invoice.payment_failed', 'data' => array( 'object' => array( 'customer' => 'cus_9', 'subscription' => 'sub_7' ) ) ) );
 ok( 'past_due' === $pf['fields']['status'], 'a failed invoice means past_due' );
+$inv = $S::normalise( array( 'type' => 'invoice.paid', 'created' => 300, 'data' => array( 'object' => array(
+	'customer' => 'cus_old', 'customer_email' => 'Bert@Example.com', 'subscription' => 'sub_old', 'currency' => 'gbp',
+	'lines' => array( 'data' => array( array( 'period' => array( 'end' => 1800000000 ), 'price' => array( 'id' => 'price_E', 'product' => 'prod_E', 'nickname' => 'Elite', 'metadata' => array( 'jouver_plan' => 'elite' ) ) ) ) ) ) ) ) );
+ok( 'bert@example.com' === $inv['email'] && 'cus_old' === $inv['customer'] && 'sub_old' === $inv['subscription'], 'invoice.paid: e-mail, customer and subscription read (links a pre-plugin dealer)' );
+ok( 'active' === $inv['fields']['status'] && 'elite' === $inv['fields']['plan_key'] && 'GBP' === $inv['fields']['currency'] && '2027-01-15 08:00:00' === $inv['fields']['current_period_end'], 'invoice.paid: plan, currency and period end from the invoice line' );
+ok( null === $S::normalise( array( 'type' => 'invoice.paid', 'data' => array( 'object' => array( 'customer' => 'cus_1', 'customer_email' => 'a@b.c', 'lines' => array( 'data' => array() ) ) ) ) ), 'invoice.paid without a subscription (one-off invoice) is not a plan' );
+ok( 'bert@example.com' === $S::normalise( array( 'type' => 'invoice.payment_failed', 'data' => array( 'object' => array( 'customer' => 'cus_old', 'customer_email' => 'Bert@Example.com', 'subscription' => 'sub_old' ) ) ) )['email'], 'invoice.payment_failed carries the e-mail too' );
 ok( null === $S::normalise( array( 'type' => 'charge.refunded', 'data' => array( 'object' => array() ) ) ), 'other events are ignored' );
 
 // What the screens see

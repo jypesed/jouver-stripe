@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Jouver Stripe
  * Description:       Receives Stripe's signed webhook and keeps each dealer's plan. JAPP and Jouver Core read it with jouver_stripe_plan( $user_id ).
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Jouver
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'JOUVER_STRIPE_VERSION', '0.1.0' );
+define( 'JOUVER_STRIPE_VERSION', '0.1.1' );
 define( 'JOUVER_STRIPE_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once JOUVER_STRIPE_DIR . 'includes/class-jouver-stripe-schema.php';
