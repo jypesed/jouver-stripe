@@ -18,8 +18,9 @@ everything needed is inside the event.
    `checkout.session.completed`, `customer.subscription.created`, `.updated`, `.deleted`, `invoice.paid`, `invoice.payment_failed`.
    Copy that endpoint's signing secret into step 1.
 3. Name the plans: on each Stripe **price** add metadata `jouver_plan` = `elite` / `formula1` / `free`.
-   Or map ids: `add_filter( 'jouver_stripe_plan_map', fn() => array( 'prod_…' => 'elite' ) );`
-   Plan keys are never guessed; Settings → Jouver Stripe lists dealers whose plan is "not mapped".
+   Or fill the **Plan map** under Settings → Jouver Stripe (`price_… = elite`, one per line), or use the
+   filter `jouver_stripe_plan_map`. Plan keys are never guessed; the admin page lists dealers whose plan is
+   "not mapped", and saving the map re-applies it to every stored dealer.
 4. The pricing table must pass the WordPress user id as `client-reference-id` (JAPP's billing page does).
 
 ## Reading the plan
@@ -37,10 +38,18 @@ Action `jouver_stripe_plan_changed( $user_id, $plan )` fires after each change.
 user by customer. Fallback: one exact e-mail match. Subscription events that arrive before the checkout are
 held for two days and replayed. A customer we do not know (a website customer) is answered 200 and ignored.
 
-**Dealers who paid before this plugin existed** have no row and show as free. Subscription events carry no
-e-mail, so they cannot be matched on their own. `invoice.paid` does carry the e-mail and fires at every renewal,
-so each existing dealer is linked (by exact e-mail match) at the next monthly payment, within one billing cycle.
-Dealers whose Stripe e-mail differs from their WordPress e-mail stay unmatched; the admin page lists the events.
+## Existing dealers (one-time import)
+Dealers who paid before this plugin existed have no row and show as free, and annual subscribers would not
+send a renewal event for up to a year. Import them once, without an API key:
+1. Fill the Plan map (above) first.
+2. In Stripe: **Subscriptions → Export**, all columns, CSV.
+3. Settings → Jouver Stripe → **Import existing dealers**: upload the file with "Write" unticked to preview,
+   check the table, then upload again with "Write" ticked.
+
+Each row is matched to a dealer by exact e-mail. For a dealer whose Stripe e-mail differs, add a `user_id`
+column to the CSV with their WordPress user id. Canceled rows are skipped, website customers show as
+unmatched, and a row the webhook has already written is never overwritten. From then on `invoice.paid`
+(which carries the e-mail) also links any dealer the import missed, at their next payment.
 
 ## Safety
 - Stripe's signature is checked (HMAC-SHA256, 5 minute window). No secret configured → 503, nothing stored.

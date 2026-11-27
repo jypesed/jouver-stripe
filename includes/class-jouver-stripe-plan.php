@@ -119,14 +119,80 @@ class Jouver_Stripe_Plan {
 			return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $metadata['jouver_plan'] ) );
 		}
 		$map = apply_filters( 'jouver_stripe_plan_map', array() );
-		if ( is_array( $map ) ) {
-			foreach ( array( (string) $price_id, (string) $product_id ) as $id ) {
-				if ( '' !== $id && ! empty( $map[ $id ] ) ) {
-					return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $map[ $id ] ) );
-				}
+		$map = ( is_array( $map ) ? $map : array() ) + self::stored_map();
+		foreach ( array( (string) $price_id, (string) $product_id ) as $id ) {
+			if ( '' !== $id && ! empty( $map[ $id ] ) ) {
+				return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $map[ $id ] ) );
 			}
 		}
 		return '';
+	}
+
+	/** The map kept under Settings → Jouver Stripe: price or product id => plan key. */
+	public static function stored_map() {
+		$m = function_exists( 'get_option' ) ? get_option( 'jouver_stripe_plan_map', array() ) : array();
+		return is_array( $m ) ? $m : array();
+	}
+
+	/** A readable name when Stripe's price has no nickname. */
+	public static function label_for_key( $key ) {
+		$names = array( 'free' => 'Freemium', 'elite' => 'Elite', 'formula1' => 'Formula 1' );
+		return isset( $names[ $key ] ) ? $names[ $key ] : '';
+	}
+
+	private static function label_of( array $price, $price_id, $product_id ) {
+		$l = (string) ( $price['nickname'] ?? ( $price['lookup_key'] ?? '' ) );
+		return '' !== $l ? $l : self::label_for_key( self::plan_from( $price_id, $product_id, isset( $price['metadata'] ) && is_array( $price['metadata'] ) ? $price['metadata'] : array() ) );
+	}
+
+	/**
+	 * Recompute plan_key (and an empty label) for every row from its stored
+	 * price/product id. Run after the map changes. Returns rows changed.
+	 */
+	public static function reapply_map() {
+		global $wpdb;
+		$t = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows    = (array) $wpdb->get_results( "SELECT user_id, price_id, product_id, plan_key, plan_label FROM {$t}", ARRAY_A );
+		$changed = 0;
+		foreach ( $rows as $r ) {
+			$key = self::plan_from( $r['price_id'], $r['product_id'] );
+			if ( '' === $key || $key === $r['plan_key'] ) {
+				continue;
+			}
+			$f = array( 'plan_key' => $key );
+			if ( '' === (string) $r['plan_label'] ) {
+				$f['plan_label'] = self::label_for_key( $key );
+			}
+			$wpdb->update( $t, $f, array( 'user_id' => (int) $r['user_id'] ) );
+			$changed++;
+		}
+		return $changed;
+	}
+
+	/**
+	 * One row from the Stripe Subscriptions CSV (Settings → Jouver Stripe →
+	 * Import). Never overwrites what the webhook has written: a row with a
+	 * real last_event_at is kept as it is.
+	 *
+	 * @return string imported|updated|kept
+	 */
+	public static function import_row( $user_id, array $fields ) {
+		global $wpdb;
+		$t   = self::table();
+		$cur = self::row_for_user( $user_id );
+		if ( $cur && (int) $cur['last_event_at'] > 0 ) {
+			return 'kept';
+		}
+		$fields = array_filter( $fields, function ( $v ) { return null !== $v && '' !== $v; } );
+		$fields['last_event_at'] = 0;
+		$fields['updated_at']    = gmdate( 'Y-m-d H:i:s' );
+		if ( $cur ) {
+			$wpdb->update( $t, $fields, array( 'user_id' => (int) $user_id ) );
+			return 'updated';
+		}
+		$wpdb->insert( $t, array_merge( array( 'user_id' => (int) $user_id, 'status' => 'incomplete' ), $fields ) );
+		return 'imported';
 	}
 
 	private static function id_of( $v ) {
@@ -185,7 +251,7 @@ class Jouver_Stripe_Plan {
 				'price_id'               => $price_id,
 				'product_id'             => $product_id,
 				'plan_key'               => self::plan_from( $price_id, $product_id, isset( $price['metadata'] ) && is_array( $price['metadata'] ) ? $price['metadata'] : array() ),
-				'plan_label'             => (string) ( $price['nickname'] ?? ( $price['lookup_key'] ?? '' ) ),
+				'plan_label'             => self::label_of( $price, $price_id, $product_id ),
 				'currency'               => strtoupper( substr( (string) ( $price['currency'] ?? '' ), 0, 3 ) ),
 				'current_period_end'     => (int) $end > 0 ? gmdate( 'Y-m-d H:i:s', (int) $end ) : null,
 				'cancel_at_period_end'   => empty( $obj['cancel_at_period_end'] ) ? 0 : 1,
@@ -219,7 +285,7 @@ class Jouver_Stripe_Plan {
 				'price_id'               => $price_id,
 				'product_id'             => $product_id,
 				'plan_key'               => self::plan_from( $price_id, $product_id, isset( $price['metadata'] ) && is_array( $price['metadata'] ) ? $price['metadata'] : array() ),
-				'plan_label'             => (string) ( $price['nickname'] ?? ( $price['lookup_key'] ?? '' ) ),
+				'plan_label'             => self::label_of( $price, $price_id, $product_id ),
 				'currency'               => strtoupper( substr( (string) ( $obj['currency'] ?? '' ), 0, 3 ) ),
 				'current_period_end'     => isset( $line['period']['end'] ) && (int) $line['period']['end'] > 0 ? gmdate( 'Y-m-d H:i:s', (int) $line['period']['end'] ) : null,
 			);

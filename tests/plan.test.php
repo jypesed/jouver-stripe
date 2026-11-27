@@ -3,7 +3,7 @@
 define( 'ABSPATH', '/' );
 $FILTER = array();
 function apply_filters( $tag, $v ) { global $FILTER; return isset( $FILTER[ $tag ] ) ? $FILTER[ $tag ] : $v; }
-function add_action() {}
+function add_action() {} function get_option( $k, $d = array() ) { return $d; }
 function ok( $c, $m ) { global $bad; echo ( $c ? 'ok' : 'FAIL' ) . ": $m\n"; if ( ! $c ) { $bad = 1; } }
 require __DIR__ . '/../includes/class-jouver-stripe-plan.php';
 $S = 'Jouver_Stripe_Plan';

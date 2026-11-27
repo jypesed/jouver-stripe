@@ -4,7 +4,7 @@ define( 'ABSPATH', '/' ); define( 'DAY_IN_SECONDS', 86400 ); define( 'ARRAY_A', 
 class WP_REST_Request { function __construct( $b, $sig ) { $this->b = $b; $this->sig = $sig; } function get_body() { return $this->b; } function get_header( $h ) { return $this->sig; } }
 class WP_REST_Response { function __construct( $d, $s = 200 ) { $this->data = $d; $this->status = $s; } }
 $TR = array(); $USERS = array( 42 => 'dealer@example.com' ); $FILTER = array();
-function apply_filters( $t, $v ) { return $v; } function do_action() {} function add_action() {}
+function apply_filters( $t, $v ) { return $v; } function do_action() {} function add_action() {} function get_option( $k, $d = array() ) { return $d; }
 function get_userdata( $id ) { global $USERS; return isset( $USERS[ $id ] ) ? (object) array( 'ID' => $id ) : false; }
 function get_user_by( $f, $v ) { global $USERS; $id = array_search( $v, $USERS, true ); return $id ? (object) array( 'ID' => $id ) : false; }
 function get_transient( $k ) { global $TR; return $TR[ $k ] ?? false; } function set_transient( $k, $v ) { global $TR; $TR[ $k ] = $v; } function delete_transient( $k ) { global $TR; unset( $TR[ $k ] ); }
