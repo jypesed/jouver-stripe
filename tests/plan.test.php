@@ -27,6 +27,8 @@ ok( 42 === $co['user_id'] && 'cus_9' === $co['customer'] && 'dealer@example.com'
 ok( 'active' === $co['fields']['status'] && 'sub_7' === $co['fields']['stripe_subscription_id'], 'checkout: paid means active, subscription kept' );
 $unpaid = $S::normalise( array( 'type' => 'checkout.session.completed', 'data' => array( 'object' => array( 'client_reference_id' => 'abc', 'customer' => 'cus_1', 'payment_status' => 'unpaid' ) ) ) );
 ok( 0 === $unpaid['user_id'] && ! isset( $unpaid['fields']['status'] ), 'checkout: non-numeric reference is no user, unpaid sets no status' );
+$oneoff = $S::normalise( array( 'type' => 'checkout.session.completed', 'data' => array( 'object' => array( 'mode' => 'payment', 'client_reference_id' => '42', 'customer' => 'cus_9', 'payment_status' => 'paid' ) ) ) );
+ok( 42 === $oneoff['user_id'] && 'cus_9' === $oneoff['fields']['stripe_customer_id'] && ! isset( $oneoff['fields']['status'] ), 'checkout: a one-off payment (ads credit) links the customer but never sets the plan active' );
 
 // Subscription updated (old API: period on the subscription; new API: on the item)
 $sub = function ( $extra ) {

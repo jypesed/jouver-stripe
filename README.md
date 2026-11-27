@@ -41,6 +41,7 @@ held for two days and replayed. A customer we do not know (a website customer) i
 - Stripe's signature is checked (HMAC-SHA256, 5 minute window). No secret configured → 503, nothing stored.
 - A repeated event id is ignored; an older event arriving late never undoes a newer one.
 - `past_due` keeps the plan while Stripe retries the card; `canceled` returns to free.
+- A one-off Checkout payment (ads credit) never changes the plan; it only links the Stripe customer to the dealer.
 
 ## Tests
 `bash tests/run.sh` (PHP only; no WordPress needed).

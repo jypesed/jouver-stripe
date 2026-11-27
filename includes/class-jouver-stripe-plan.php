@@ -160,7 +160,9 @@ class Jouver_Stripe_Plan {
 			$out['email']        = is_string( $email ) ? strtolower( trim( $email ) ) : '';
 			$paid                = in_array( (string) ( $obj['payment_status'] ?? '' ), array( 'paid', 'no_payment_required' ), true );
 			$out['fields']       = array( 'stripe_customer_id' => $out['customer'], 'stripe_subscription_id' => $out['subscription'] );
-			if ( $paid ) {
+			// Only a subscription checkout touches the plan. A one-off payment (ads
+			// credit, mode=payment) just links the Stripe customer to the dealer.
+			if ( $paid && '' !== $out['subscription'] ) {
 				$out['fields']['status'] = 'active';
 			}
 			return $out;
